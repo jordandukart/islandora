@@ -61,6 +61,12 @@ function islandora_repository_admin(array $form, array &$form_state) {
           '#description' => t('HTTP caching can reduce network traffic, by allowing clients to used cached copies.'),
           '#default_value' => variable_get('islandora_use_datastream_cache_headers', TRUE),
         ),
+        'islandora_update_object_label_on_dc_modify' => array(
+          '#type' => 'checkbox',
+          '#title' => t('Update object labels when DC is modified'),
+          '#description' => t('Sync object labels to be consistent with dc.title'),
+          '#default_value' => variable_get('islandora_update_object_label_on_dc_modify', FALSE),
+        ),
       ),
       'islandora_namespace' => array(
         '#type' => 'fieldset',

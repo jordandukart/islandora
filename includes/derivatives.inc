@@ -242,3 +242,44 @@ function islandora_filter_derivatives($hooks, $options, AbstractObject $object) 
   $hooks = array_filter($hooks, $filter_function);
   return $hooks;
 }
+
+/**
+ * Updates the label of an object from the DC title field.
+ *
+ * Force isn't checked here as this action will always occur depending on
+ * configuration.
+ *
+ * @param AbstractObject $object
+ *   An AbstractObject representing an object within Fedora.
+ * @param bool $force
+ *   Whether the derivative is being forcefully created or not.
+ *
+ * @return array
+ *   An array describing the outcome of the label updation.
+ *
+ * @see hook_islandora_derivative()
+ */
+function islandora_update_object_label_from_dc_derivative(AbstractObject $object, $force = FALSE) {
+  $dc_xml = new SimpleXMLElement($object['DC']->content);
+  $dc_xml->registerXPathNamespace('dc', 'http://purl.org/dc/elements/1.1/');
+  $dc_xml->registerXPathNamespace('oai_dc', 'http://www.openarchives.org/OAI/2.0/oai_dc/');
+
+  // Constrain to the first dc.title encountered.
+  $title = $dc_xml->xpath('/oai_dc:dc/dc:title[1]');
+  $title = reset($title);
+  if ($title && $object->label != $title) {
+    $object->label = $title;
+  }
+  return array(
+    'success' => TRUE,
+    'messages' => array(
+      array(
+        'message' => t('Updated the label for @pid.'),
+        'message_sub' => array(
+          '@pid' => $object->id,
+        ),
+        'type' => 'dsm',
+      ),
+    ),
+  );
+}

@@ -226,7 +226,7 @@ class IslandoraFedoraApiM extends FedoraApiM {
       $ret = parent::modifyDatastream($pid, $dsid, $params);
       islandora_invoke_datastream_hooks(ISLANDORA_DATASTREAM_MODIFIED_HOOK, $object->models, $dsid, $object, $datastream);
       if (isset($params['dsState']) && $params['dsState'] == 'D') {
-        islandora_invoke_datastream_hooks(ISLANDORA_DATASTREAM_PURGED_HOOK, $object->models, $dsid, $object, $dsid);
+        islandora_invoke_datastream_hooks(ISLANDORA_DATASTREAM_PURGED_HOOK, $object->models, $dsid, $object, $datastream);
       }
       return $ret;
     }

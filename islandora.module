@@ -1907,3 +1907,24 @@ function islandora_find_package($package_name) {
   }
   return $found && user_access('administer site configuration');
 }
+
+/**
+ * Implements hook_islandora_derivative().
+ */
+function islandora_islandora_derivative() {
+  if (!variable_get('islandora_update_object_label_on_dc_modify', FALSE)) {
+    return;
+  }
+  $mod_path = drupal_get_path('module', 'islandora');
+  return array(
+    array(
+      'source_dsid' => 'DC',
+      'destination_dsid' => NULL,
+      'weight' => 0,
+      'function' => array(
+        'islandora_update_object_label_from_dc_derivative',
+      ),
+      'file' => "$mod_path/includes/derivatives.inc",
+    ),
+  );
+}
