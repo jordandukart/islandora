@@ -49,15 +49,13 @@ function islandora_get_breadcrumbs($object) {
  *   only used to track a single value:
  *   - level: The number of child-parent relationships to follow. Defaults to
  *     10.
+ *   -root_object: The object that is being rendered for.
  *
  * @return array
  *   An array of links representing the breadcrumb trail, "root" first.
  */
 function islandora_get_breadcrumbs_recursive($pid, FedoraRepository $repository, array &$context = NULL) {
   module_load_include('inc', 'islandora', 'includes/utilities');
-
-  // Before executing the query, we have a base case of accessing the top-level
-  // collection.
   if ($context === NULL) {
     $context['level'] = 10;
   }
@@ -75,73 +73,112 @@ function islandora_get_breadcrumbs_recursive($pid, FedoraRepository $repository,
       $link = menu_link_load($mlid);
       $title = (isset($link['title']) ? $link['title'] : $title);
     }
-
     return array(
       l(t('Home'), '<front>'),
       l($title, 'islandora'),
     );
   }
   else {
-
-    $query = <<<EOQ
-    PREFIX islandora-rels-ext: <http://islandora.ca/ontology/relsext#>
-    PREFIX fedora-rels-ext: <info:fedora/fedora-system:def/relations-external#>
-    SELECT DISTINCT ?object ?label
-    FROM <#ri>
-    WHERE {
-        <info:fedora/!pid> ?collection_predicate ?object;
-        <fedora-model:label> ?label .
-        ?object <fedora-model:state> <fedora-model:Active>
-        .
-        !optionals
-        !filters
-          }
-        !order
-EOQ;
-
-    $query_optionals = (array) module_invoke('islandora_xacml_api', 'islandora_basic_collection_get_query_optionals', 'view');
-    $query_filters = (array) module_invoke('islandora_xacml_api', 'islandora_basic_collection_get_query_filters');
-    $filter_map = function ($filter) {
-      return "FILTER($filter)";
-    };
+    $result = FALSE;
     $object = islandora_object_load($pid);
     $breadcrumb_predicates = islandora_invoke_hook_list(ISLANDORA_BREADCRUMB_FILTER_PREDICATE_HOOK, $object->models, array($object));
-    $same_term_map = function ($predicate) {
-      return "sameTerm(?collection_predicate, <$predicate>)";
-    };
-    $collection_predicate_filters = array_map($same_term_map, $breadcrumb_predicates);
-    $query_filters[] = implode(' || ', $collection_predicate_filters);
-    $query_order = "ORDER BY DESC(?label)";
-    $query = format_string($query, array(
-      '!optionals' => !empty($query_optionals) ? ('OPTIONAL {{' . implode('} UNION {', $query_optionals) . '}}') : '',
-      '!filters' => implode(' ', array_map($filter_map, $query_filters)),
-      '!order' => $query_order,
-    ));
-    $query = format_string($query, array(
-      '!pid' => $pid,
-    ));
-    $results = $repository->ri->sparqlQuery($query, 'unlimited');
 
-    if (count($results) > 0 && $context['level'] > 0) {
-      $parent = $results[0]['object']['value'];
-      $this_label = $results[0]['label']['value'];
+    if (FALSE) {
+      $query = <<<EOQ
+      PREFIX islandora-rels-ext: <http://islandora.ca/ontology/relsext#>
+      PREFIX fedora-rels-ext: <info:fedora/fedora-system:def/relations-external#>
+      SELECT DISTINCT ?object ?label
+      FROM <#ri>
+      WHERE {
+          <info:fedora/!pid> ?collection_predicate ?object;
+          <fedora-model:label> ?label .
+          ?object <fedora-model:state> <fedora-model:Active>
+          .
+          !optionals
+          !filters
+            }
+          !order
+EOQ;
 
-      if (empty($this_label)) {
-        $this_label = t('-');
-      }
-
-      $context['level']--;
-      return array_merge(islandora_get_breadcrumbs_recursive($parent, $repository, $context), array(
-        l($this_label, "islandora/object/$pid"),
+      $query_optionals = (array) module_invoke('islandora_xacml_api', 'islandora_basic_collection_get_query_optionals', 'view');
+      $query_filters = (array) module_invoke('islandora_xacml_api', 'islandora_basic_collection_get_query_filters');
+      $filter_map = function ($filter) {
+        return "FILTER($filter)";
+      };
+      $same_term_map = function ($predicate) {
+        return "sameTerm(?collection_predicate, <$predicate>)";
+      };
+      $collection_predicate_filters = array_map($same_term_map, $breadcrumb_predicates);
+      $query_filters[] = implode(' || ', $collection_predicate_filters);
+      $query_order = "ORDER BY DESC(?label)";
+      $query = format_string($query, array(
+        '!optionals' => !empty($query_optionals) ? ('OPTIONAL {{' . implode('} UNION {', $query_optionals) . '}}') : '',
+        '!filters' => implode(' ', array_map($filter_map, $query_filters)),
+        '!order' => $query_order,
       ));
+      $query = format_string($query, array(
+        '!pid' => $pid,
+      ));
+      $results = $repository->ri->sparqlQuery($query, 'unlimited');
+      // Format the results into a generic structure.
+      if (count($results)) {
+        $result = reset($results);
+        $label = $result['label']['value'];
+        $parent = $result['object']['value'];
+      }
     }
+    // Use solr.
     else {
-      // Add an non-link, as we don't know how to get back to the root, and
-      // render the last two links and break (on the next pass).
-      return array_merge(
-        islandora_get_breadcrumbs_recursive($root, $repository, $context),
-        array('...')
+      $qp = new IslandoraSolrQueryProcessor();
+      $base_fl = array(
+        'PID',
+        variable_get('islandora_solr_object_label', 'fgs_label_s'),
       );
+      $breadcrumb_fls = array();
+      foreach ($breadcrumb_predicates as $predicate) {
+        // Dumb mapping for now.
+        if ($predicate == 'fedora-rels-ext:isMemberOf') {
+          $solr = variable_get('islandora_solr_member_of_field', 'RELS_EXT_isMemberOf_uri_ms');
+        }
+        else {
+          $solr = variable_get('islandora_solr_member_of_collection_field', 'RELS_EXT_isMemberOfCollection_uri_ms');
+        }
+        if (!empty($solr)) {
+          $breadcrumb_fls[] = $solr;
+        }
+      }
+      $qp->buildQuery(format_string('PID:"@pid"', array('@pid' => $pid)));
+      $qp->solrParams['fl'] = implode(', ', array_merge($base_fl, $breadcrumb_fls));
+      $qp->solrLimit = 1;
+      $qp->executeQuery(FALSE);
+      // Format results into a generic structure.
+      if ($qp->islandoraSolrResult['response']['numFound'] > 0) {
+        $result = reset($qp->islandoraSolrResult['response']['objects']);
+        foreach ($result['solr_doc'] as $field => $values) {
+          if (in_array($field, $breadcrumb_fls)) {
+            $parent = str_replace('info:fedora/', '', reset($values));
+            $label = $result['object_label'];
+            break;
+          }
+        }
+      }
     }
+  }
+  if ($result && $context['level'] > 0) {
+    if (empty($label)) {
+      $label = t('-');
+    }
+    $context['level']--;
+    return array_merge(islandora_get_breadcrumbs_recursive($parent, $repository, $context), array(
+      l($label, "islandora/object/$pid"),
+    ));
+  }
+  else {
+    // Add an non-link, as we don't know how to get back to the root, and
+    // render the last two links and break (on the next pass).
+    return array_merge(
+      islandora_get_breadcrumbs_recursive($root, $repository, $context),
+      array('...')
+    );
   }
 }
