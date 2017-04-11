@@ -50,6 +50,9 @@ wget http://alpha.library.yorku.ca/phpcpd.phar
 sudo mv phpcpd.phar /usr/local/bin/phpcpd
 sudo chmod +x /usr/local/bin/phpcpd
 
+#PHPUnit
+composer require 'phpunit/phpunit' '<4.8.35|<5.4.3,>=5.0'
+
 # Drupal installation.
 phpenv rehash
 drush dl --yes drupal
