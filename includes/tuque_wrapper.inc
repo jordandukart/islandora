@@ -239,6 +239,14 @@ class IslandoraFedoraObject extends FedoraObject {
       islandora_invoke_datastream_hooks(ISLANDORA_DATASTREAM_INGESTED_HOOK, $object->models, $datastream->id, $object, $datastream);
       return $ret;
     }
+    catch (DatastreamExistsException $e) {
+      $message = islandora_deprecated('7.x-1.10', t('The datastream @dsid already exists on the object: @pid. After the 7.x-1.10 release this will throw an exception.', array(
+        '@dsid' => $datastream->id,
+        '@pid' => $object->id,
+      )));
+      trigger_error(filter_xss($message), E_USER_DEPRECATED);
+      return FALSE;
+    }
     catch (Exception $e) {
       watchdog('islandora', 'Failed to ingest datastream @dsid on object: @pid</br>code: @code<br/>message: @msg', array(
         '@pid' => $object->id,
