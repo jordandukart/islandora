@@ -73,8 +73,8 @@ function islandora_datastream_to_purge(AbstractObject $object, $dsid) {
   module_load_include('inc', 'islandora', 'includes/utilities');
   $hooks = islandora_invoke_hook_list(ISLANDORA_DERIVATIVE_CREATION_HOOK, $object->models, array($object));
   $hook_filter = function ($hook_def) use ($dsid) {
-    return isset($hook_def['source_dsid']) && isset($hook_def['destination_dsid']) && $hook_def['destination_dsid'] != $dsid ?
-      $hook_def['source_dsid'] == $dsid :
+    return isset($hook_def['source_dsid']) && isset($hook_def['destination_dsid']) ?
+      ($hook_def['source_dsid'] == $dsid && $hook_def['destination_dsid'] != $dsid) :
       FALSE;
   };
   $hooks = array_filter($hooks, $hook_filter);
