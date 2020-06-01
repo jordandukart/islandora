@@ -38,6 +38,7 @@ class IslandoraSettingsForm extends ConfigFormBase {
 
   /**
    * The saved password (if set).
+   *
    * @var string
    */
   private $brokerPassword;
@@ -115,7 +116,7 @@ class IslandoraSettingsForm extends ConfigFormBase {
         ],
         'required' => [
           $state_selector => ['checked' => TRUE],
-	]
+        ],
       ],
     ];
     $form['broker_info'][self::BROKER_PASSWORD] = [
@@ -132,7 +133,7 @@ class IslandoraSettingsForm extends ConfigFormBase {
       '#type' => 'textfield',
       '#title' => $this->t('JWT Expiry'),
       '#default_value' => $config->get(self::JWT_EXPIRY),
-      '#description' => 'Eg: 60, "2 days", "10h", "7d". A numeric value is interpreted as a seconds count. If you use a string be sure you provide the time units (days, hours, etc), otherwise milliseconds unit is used by default ("120" is equal to "120ms").',
+      '#description' => $this->t('Eg: 60, "2 days", "10h", "7d". A numeric value is interpreted as a seconds count. If you use a string be sure you provide the time units (days, hours, etc), otherwise milliseconds unit is used by default ("120" is equal to "120ms").'),
     ];
 
     $form[self::GEMINI_URL] = [
@@ -190,15 +191,17 @@ class IslandoraSettingsForm extends ConfigFormBase {
       $client = new Client($brokerUrl);
       if ($form_state->getValue('provide_user_creds')) {
         $broker_password = $form_state->getValue(self::BROKER_PASSWORD);
-	  if (!$broker_password) {
-	    if (!$this->brokerPassword) {
-	      $form_state->setErrorByName(self::BROKER_PASSWORD, $this->t('A password must be supplied'));
-	    }
-	    else {
-              $broker_password = $this->brokerPassword;
-	    }
-	  }
-	 $client->setLogin($form_state->getValue(self::BROKER_USER), $broker_password);
+        // When stored password type fields aren't rendered again.
+        if (!$broker_password) {
+          // Use the stored password if it exists.
+          if (!$this->brokerPassword) {
+            $form_state->setErrorByName(self::BROKER_PASSWORD, $this->t('A password must be supplied'));
+          }
+          else {
+            $broker_password = $this->brokerPassword;
+          }
+        }
+        $client->setLogin($form_state->getValue(self::BROKER_USER), $broker_password);
       }
       $stomp = new StatefulStomp($client);
       $stomp->subscribe('dummy-queue-for-validation');
@@ -277,10 +280,11 @@ class IslandoraSettingsForm extends ConfigFormBase {
 
     $broker_password = $form_state->getValue(self::BROKER_PASSWORD);
 
-    // If there's no user set delete what may have been here before as password fields will also be blank when default valuing.
+    // If there's no user set delete what may have been here before as password
+    // fields will also be blank.
     if (!$form_state->getValue('provide_user_creds')) {
-      $config->delete(self::BROKER_USER);
-      $config->delete(self::BROKER_PASSWORD);
+      $config->clear(self::BROKER_USER);
+      $config->clear(self::BROKER_PASSWORD);
     }
     else {
       $config->set(self::BROKER_USER, $form_state->getValue(self::BROKER_USER));
