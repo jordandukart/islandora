@@ -107,7 +107,6 @@ function islandora_node_delete(NodeInterface $node) {
  */
 function islandora_media_insert(MediaInterface $media) {
   $utils = \Drupal::service('islandora.utils');
-
   // Execute index reactions.
   $utils->executeMediaReactions('\Drupal\islandora\Plugin\ContextReaction\IndexReaction', $media);
 
@@ -121,6 +120,8 @@ function islandora_media_insert(MediaInterface $media) {
       $media
     );
   }
+  // Wait until the media insert is complete, then fire file derivatives.
+  drupal_register_shutdown_function('_islandora_fire_media_file_derivative_reaction', $media);
 }
 
 /**
@@ -137,7 +138,6 @@ function islandora_media_update(MediaInterface $media) {
 
   // Execute index reactions.
   $utils->executeMediaReactions('\Drupal\islandora\Plugin\ContextReaction\IndexReaction', $media);
-
   // Does it have a source field?
   $source_field = $media_source_service->getSourceFieldName($media->bundle());
   if (empty($source_field)) {
@@ -148,7 +148,6 @@ function islandora_media_update(MediaInterface $media) {
   if ($media->get($source_field)->equals($media->original->get($source_field))) {
     return;
   }
-
   // If it has a parent node...
   $node = $utils->getParentNode($media);
   if ($node) {
@@ -158,6 +157,7 @@ function islandora_media_update(MediaInterface $media) {
       $node,
       $media
     );
+    $utils->executeMediaReactions('\Drupal\islandora\Plugin\ContextReaction\DerivativeFileReaction', $media);
   }
 }
 
@@ -169,6 +169,25 @@ function islandora_media_delete(MediaInterface $media) {
 
   // Execute delete reactions.
   $utils->executeMediaReactions('\Drupal\islandora\Plugin\ContextReaction\DeleteReaction', $media);
+}
+
+/**
+ * Helper to fire media derivative file reactions after a media 'insert'.
+ *
+ * This function should not be called on its own; it exists as a workaround to
+ * being unable to fire media events after a media insert operation. This
+ * behaviour will eventually be replaced by event listeners once these are
+ * implemented in Drupal 9.
+ *
+ * @param \Drupal\Core\Media\MediaInterface $media
+ *   The media that was just inserted.
+ *
+ * @see https://www.drupal.org/project/drupal/issues/2551893
+ */
+function _islandora_fire_media_file_derivative_reaction(MediaInterface $media) {
+  $utils = \Drupal::service('islandora.utils');
+  // Execute derivative file reactions.
+  $utils->executeMediaReactions('\Drupal\islandora\Plugin\ContextReaction\DerivativeFileReaction', $media);
 }
 
 /**
@@ -186,7 +205,7 @@ function islandora_file_insert(FileInterface $file) {
  */
 function islandora_file_update(FileInterface $file) {
   // Exit early if unchanged.
-  if ($file->filehash['sha1'] == $file->original->filehash['sha1']) {
+  if ($file->filehash != NULL && $file->original->filehash != NULL && $file->filehash['sha1'] == $file->original->filehash['sha1']) {
     return;
   }
 
@@ -274,10 +293,11 @@ function islandora_jsonld_alter_normalized_array(EntityInterface $entity, array 
 function islandora_entity_view_mode_alter(&$view_mode, EntityInterface $entity) {
   // Change the view mode based on user input from a 'view_mode_alter'
   // ContextReaction.
+  $entity_type = $entity->getEntityType()->id();
   $storage = \Drupal::service('entity_type.manager')->getStorage('entity_view_mode');
   $context_manager = \Drupal::service('context.manager');
-  $current_entity = \Drupal::routeMatch()->getParameter('node');
-  $current_id = ($current_entity instanceof NodeInterface) ? $current_entity->id() : NULL;
+  $current_entity = \Drupal::routeMatch()->getParameter($entity_type);
+  $current_id = ($current_entity instanceof NodeInterface || $current_entity instanceof MediaInterface) ? $current_entity->id() : NULL;
   if (isset($current_id) && $current_id == $entity->id()) {
     foreach ($context_manager->getActiveReactions('\Drupal\islandora\Plugin\ContextReaction\ViewModeAlterReaction') as $reaction) {
       // Construct the new view mode's machine name.
@@ -314,6 +334,51 @@ function islandora_preprocess_node(&$variables) {
   if (node_is_page($variables['elements']['#node'])) {
     $variables['page'] = TRUE;
   }
+}
+
+/**
+ * Implements hook_form_alter().
+ */
+function islandora_form_alter(&$form, FormStateInterface $form_state, $form_id) {
+  $media_add_forms = ['media_audio_add_form', 'media_document_add_form',
+    'media_extracted_text_add_form', 'media_file_add_form', 'media_image_add_form',
+    'media_fits_technical_metadata_add_form', 'media_video_add_form',
+  ];
+
+  if (in_array($form['#form_id'], $media_add_forms)) {
+    $params = \Drupal::request()->query->all();
+    if (isset($params['edit'])) {
+      $media_of_nid = $params['edit']['field_media_of']['widget'][0]['target_id'];
+      $node = \Drupal::entityTypeManager()->getStorage('node')->load($media_of_nid);
+      if ($node) {
+        $form['name']['widget'][0]['value']['#default_value'] = $node->getTitle();
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_field_widget_WIDGET_TYPE_form_alter().
+ */
+function islandora_field_widget_image_image_form_alter(&$element, $form_state, $context) {
+  $element['#process'][] = 'islandora_add_default_image_alt_text';
+}
+
+/**
+ * Callback for hook_field_widget_WIDGET_TYPE_form_alter().
+ */
+function islandora_add_default_image_alt_text($element, $form_state, $form) {
+  if ($element['alt']['#access']) {
+    $params = \Drupal::request()->query->all();
+    if (isset($params['edit'])) {
+      $media_of_nid = $params['edit']['field_media_of']['widget'][0]['target_id'];
+      $node = \Drupal::entityTypeManager()->getStorage('node')->load($media_of_nid);
+      if ($node) {
+        $element['alt']['#default_value'] = $node->getTitle();
+      }
+    }
+  }
+  return $element;
 }
 
 /**
@@ -357,16 +422,17 @@ function islandora_form_block_form_alter(&$form, FormStateInterface $form_state,
   // /admin/structure/context instead if you want to use these conditions
   // to alter block layout.
   unset($form['visibility']['content_entity_type']);
-  unset($form['visibility']['parent_node_has_term']);
-  unset($form['visibility']['node_had_namespace']);
-  unset($form['visibility']['media_has_term']);
   unset($form['visibility']['file_uses_filesystem']);
-  unset($form['visibility']['node_has_term']);
-  unset($form['visibility']['node_has_parent']);
-  unset($form['visibility']['media_uses_filesystem']);
   unset($form['visibility']['media_has_mimetype']);
-  unset($form['visibility']['node_is_islandora_object']);
+  unset($form['visibility']['media_has_term']);
   unset($form['visibility']['media_is_islandora_media']);
+  unset($form['visibility']['media_uses_filesystem']);
+  unset($form['visibility']['node_had_namespace']);
+  unset($form['visibility']['node_has_parent']);
+  unset($form['visibility']['node_has_term']);
+  unset($form['visibility']['node_is_islandora_object']);
+  unset($form['visibility']['node_referenced_by_node']);
+  unset($form['visibility']['parent_node_has_term']);
 }
 
 /**

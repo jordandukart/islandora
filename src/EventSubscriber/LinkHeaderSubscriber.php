@@ -17,7 +17,7 @@ use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
- * Class LinkHeaderSubscriber.
+ * Abstract class to subscribe to LinkHeader Event.
  *
  * @package Drupal\islandora\EventSubscriber
  */
@@ -263,7 +263,6 @@ abstract class LinkHeaderSubscriber implements EventSubscriberInterface {
     $current_format = $this->requestStack->getCurrentRequest()->query->get('_format');
 
     $links = [];
-    $route_name = $this->routeMatch->getRouteName();
 
     if ($rest_resource_config) {
       $formats = $rest_resource_config->getFormats("GET");
@@ -291,7 +290,7 @@ abstract class LinkHeaderSubscriber implements EventSubscriberInterface {
             break;
 
           default:
-            continue;
+            continue 2;
         }
 
         // Skip route if the user doesn't have access.

@@ -7,6 +7,7 @@ use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Routing\RouteMatch;
 use Drupal\Core\Session\AccountInterface;
+use Drupal\media\Entity\Media;
 use Drupal\media\MediaInterface;
 use Drupal\media\MediaTypeInterface;
 use Drupal\node\NodeInterface;
@@ -20,7 +21,7 @@ use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * Class MediaSourceController.
+ * Controller for MediaSource.
  *
  * @package Drupal\islandora\Controller
  */
@@ -207,6 +208,79 @@ class MediaSourceController extends ControllerBase {
     // We'd have 404'd already if node didn't exist, so no need to check.
     // Just hack it out of the route match.
     $node = $route_match->getParameter('node');
+    return AccessResult::allowedIf($node->access('update', $account) && $account->hasPermission('create media'));
+  }
+
+  /**
+   * Adds file to existing media.
+   *
+   * @param Drupal\media\Entity\Media\Media $media
+   *   The media to which file is added.
+   * @param string $destination_field
+   *   The name of the media field to add file reference.
+   * @param \Symfony\Component\HttpFoundation\Request $request
+   *   The request object.
+   *
+   * @return \Symfony\Component\HttpFoundation\Response
+   *   201 on success with a Location link header.
+   *
+   * @throws \Drupal\Core\Entity\EntityStorageException
+   * @throws \Drupal\Core\TypedData\Exception\ReadOnlyException
+   */
+  public function attachToMedia(
+    Media $media,
+    string $destination_field,
+    Request $request
+  ) {
+    $content_location = $request->headers->get('Content-Location', "");
+    if (empty($content_location)) {
+      throw new BadRequestHttpException("Missing Content-Location header");
+    }
+
+    $content_type = $request->headers->get('Content-Type', "");
+    if (empty($content_type)) {
+      throw new BadRequestHttpException("Missing Content-Type header");
+    }
+
+    // Since we create both a Media and its File,
+    // start a transaction.
+    $transaction = $this->database->startTransaction();
+
+    try {
+      $this->service->putToMedia(
+        $media,
+        $destination_field,
+        $request->getContent(TRUE),
+        $content_type,
+        $content_location
+      );
+      // Should only see this with a GET request for testing.
+      return new Response("<h1>Complete</h1>");
+    }
+    catch (HttpException $e) {
+      $transaction->rollBack();
+      throw $e;
+    }
+    catch (\Exception $e) {
+      $transaction->rollBack();
+      throw new HttpException(500, $e->getMessage());
+    }
+  }
+
+  /**
+   * Checks for permissions to update a node and update media.
+   *
+   * @param \Drupal\Core\Session\AccountInterface $account
+   *   Account for user making the request.
+   * @param \Drupal\Core\Routing\RouteMatch $route_match
+   *   Route match to get Node from url params.
+   *
+   * @return \Drupal\Core\Access\AccessResultInterface
+   *   Access result.
+   */
+  public function attachToMediaAccess(AccountInterface $account, RouteMatch $route_match) {
+    $media = $route_match->getParameter('media');
+    $node = $this->utils->getParentNode($media);
     return AccessResult::allowedIf($node->access('update', $account) && $account->hasPermission('create media'));
   }
 

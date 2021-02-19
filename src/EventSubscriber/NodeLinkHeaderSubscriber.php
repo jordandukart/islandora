@@ -8,7 +8,7 @@ use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
- * Class NodeLinkHeaderSubscriber.
+ * Subcribes to NodeLinkHeader.
  *
  * @package Drupal\islandora\EventSubscriber
  */

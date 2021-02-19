@@ -30,11 +30,13 @@ class NodeHasTermTest extends IslandoraFunctionalTestBase {
   public function testNodeHasTerm() {
 
     // Create a new node with the tag.
-    $node = $this->container->get('entity_type.manager')->getStorage('node')->create([
-      'type' => 'test_type',
-      'title' => 'Test Node',
-      'field_tags' => [$this->imageTerm->id()],
-    ]);
+    $node = $this->container->get('entity_type.manager')
+      ->getStorage('node')
+      ->create([
+        'type' => 'test_type',
+        'title' => 'Test Node',
+        'field_tags' => [$this->imageTerm->id()],
+      ]);
 
     // Create and execute the condition.
     $condition_manager = $this->container->get('plugin.manager.condition');
@@ -48,20 +50,24 @@ class NodeHasTermTest extends IslandoraFunctionalTestBase {
     $this->assertTrue($condition->execute(), "Condition should pass if node has the term");
 
     // Create a new node without the tag.
-    $node = $this->container->get('entity_type.manager')->getStorage('node')->create([
-      'type' => 'test_type',
-      'title' => 'Test Node',
-    ]);
+    $node = $this->container->get('entity_type.manager')
+      ->getStorage('node')
+      ->create([
+        'type' => 'test_type',
+        'title' => 'Test Node',
+      ]);
 
     $condition->setContextValue('node', $node);
     $this->assertFalse($condition->execute(), "Condition should fail if the node does not have any terms");
 
     // Create a new node with the wrong tag.
-    $node = $this->container->get('entity_type.manager')->getStorage('node')->create([
-      'type' => 'test_type',
-      'title' => 'Test Node',
-      'field_tags' => [$this->preservationMasterTerm->id()],
-    ]);
+    $node = $this->container->get('entity_type.manager')
+      ->getStorage('node')
+      ->create([
+        'type' => 'test_type',
+        'title' => 'Test Node',
+        'field_tags' => [$this->preservationMasterTerm->id()],
+      ]);
 
     $condition->setContextValue('node', $node);
     $this->assertFalse($condition->execute(), "Condition should fail if the node has terms, but not the one we want.");
@@ -90,11 +96,16 @@ class NodeHasTermTest extends IslandoraFunctionalTestBase {
     $this->assertTrue($condition->execute(), "Condition should pass if has one of two terms using OR logic.");
 
     // Create a node with both tags and try it with OR.
-    $node = $this->container->get('entity_type.manager')->getStorage('node')->create([
-      'type' => 'test_type',
-      'title' => 'Test Node',
-      'field_tags' => [$this->imageTerm->id(), $this->preservationMasterTerm->id()],
-    ]);
+    $node = $this->container->get('entity_type.manager')
+      ->getStorage('node')
+      ->create([
+        'type' => 'test_type',
+        'title' => 'Test Node',
+        'field_tags' => [
+          $this->imageTerm->id(),
+          $this->preservationMasterTerm->id(),
+        ],
+      ]);
     $condition->setContextValue('node', $node);
     $this->assertTrue($condition->execute(), "Condition should pass if node has both terms using OR logic");
 

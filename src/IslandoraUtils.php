@@ -4,20 +4,19 @@ namespace Drupal\islandora;
 
 use Drupal\context\ContextManager;
 use Drupal\Core\Entity\ContentEntityInterface;
-use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\Query\QueryException;
-use Drupal\Core\Entity\Query\QueryFactory;
 use Drupal\Core\Entity\Query\QueryInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\Site\Settings;
 use Drupal\Core\Url;
 use Drupal\file\FileInterface;
 use Drupal\flysystem\FlysystemFactory;
-use Drupal\islandora\ContextProvider\NodeContextProvider;
-use Drupal\islandora\ContextProvider\MediaContextProvider;
 use Drupal\islandora\ContextProvider\FileContextProvider;
+use Drupal\islandora\ContextProvider\MediaContextProvider;
+use Drupal\islandora\ContextProvider\NodeContextProvider;
 use Drupal\islandora\ContextProvider\TermContextProvider;
 use Drupal\media\MediaInterface;
 use Drupal\node\NodeInterface;
@@ -29,7 +28,9 @@ use Drupal\taxonomy\TermInterface;
 class IslandoraUtils {
 
   const EXTERNAL_URI_FIELD = 'field_external_uri';
+
   const MEDIA_OF_FIELD = 'field_media_of';
+
   const MEDIA_USAGE_FIELD = 'field_media_use';
 
   /**
@@ -45,13 +46,6 @@ class IslandoraUtils {
    * @var \Drupal\Core\Entity\EntityFieldManagerInterface
    */
   protected $entityFieldManager;
-
-  /**
-   * Entity query.
-   *
-   * @var \Drupal\Core\Entity\Query\QueryFactory
-   */
-  protected $entityQuery;
 
   /**
    * Context manager.
@@ -81,8 +75,6 @@ class IslandoraUtils {
    *   The entity type manager.
    * @param \Drupal\Core\Entity\EntityFieldManagerInterface $entity_field_manager
    *   The entity field manager.
-   * @param \Drupal\Core\Entity\Query\QueryFactory $entity_query
-   *   Entity query.
    * @param \Drupal\context\ContextManager $context_manager
    *   Context manager.
    * @param \Drupal\flysystem\FlysystemFactory $flysystem_factory
@@ -93,14 +85,12 @@ class IslandoraUtils {
   public function __construct(
     EntityTypeManagerInterface $entity_type_manager,
     EntityFieldManagerInterface $entity_field_manager,
-    QueryFactory $entity_query,
     ContextManager $context_manager,
     FlysystemFactory $flysystem_factory,
     LanguageManagerInterface $language_manager
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->entityFieldManager = $entity_field_manager;
-    $this->entityQuery = $entity_query;
     $this->contextManager = $context_manager;
     $this->flysystemFactory = $flysystem_factory;
     $this->languageManager = $language_manager;
@@ -151,10 +141,13 @@ class IslandoraUtils {
    *   Calling getStorage() throws if the storage handler couldn't be loaded.
    */
   public function getMedia(NodeInterface $node) {
-    if (!$this->entityTypeManager->getStorage('field_storage_config')->load('media.' . self::MEDIA_OF_FIELD)) {
+    if (!$this->entityTypeManager->getStorage('field_storage_config')
+      ->load('media.' . self::MEDIA_OF_FIELD)) {
       return [];
     }
-    $mids = $this->entityQuery->get('media')->condition(self::MEDIA_OF_FIELD, $node->id())->execute();
+    $mids = $this->entityTypeManager->getStorage('media')->getQuery()
+      ->condition(self::MEDIA_OF_FIELD, $node->id())
+      ->execute();
     if (empty($mids)) {
       return [];
     }
@@ -212,12 +205,15 @@ class IslandoraUtils {
     );
 
     // Query for media that reference this file.
-    $query = $this->entityQuery->get('media', 'OR');
+    $query = $this->entityTypeManager->getStorage('media')->getQuery();
+    $group = $query->orConditionGroup();
     foreach ($conditions as $condition) {
-      $query->condition($condition, $fid);
+      $group->condition($condition, $fid);
     }
+    $query->condition($group);
 
-    return $this->entityTypeManager->getStorage('media')->loadMultiple($query->execute());
+    return $this->entityTypeManager->getStorage('media')
+      ->loadMultiple($query->execute());
   }
 
   /**
@@ -246,7 +242,7 @@ class IslandoraUtils {
     // Add field_external_uri.
     $fields[] = self::EXTERNAL_URI_FIELD;
 
-    $query = $this->entityQuery->get('taxonomy_term');
+    $query = $this->entityTypeManager->getStorage('taxonomy_term')->getQuery();
 
     $orGroup = $query->orConditionGroup();
     foreach ($fields as $field) {
@@ -261,7 +257,8 @@ class IslandoraUtils {
       return NULL;
     }
 
-    return $this->entityTypeManager->getStorage('taxonomy_term')->load(reset($results));
+    return $this->entityTypeManager->getStorage('taxonomy_term')
+      ->load(reset($results));
   }
 
   /**
@@ -497,7 +494,7 @@ class IslandoraUtils {
     array_walk($term_fields, $remove_entity);
     array_walk($node_fields, $remove_entity);
 
-    $query = $this->entityQuery->get('media');
+    $query = $this->entityTypeManager->getStorage('media')->getQuery();
     $taxon_condition = $this->getEntityQueryOrCondition($query, $term_fields, $term->id());
     $query->condition($taxon_condition);
     $node_condition = $this->getEntityQueryOrCondition($query, $node_fields, $node->id());
@@ -524,7 +521,7 @@ class IslandoraUtils {
    *   Array of fields.
    */
   public function getReferencingFields($entity_type, $target_type) {
-    $fields = $this->entityQuery->get('field_storage_config')
+    $fields = $this->entityTypeManager->getStorage('field_storage_config')->getQuery()
       ->condition('entity_type', $entity_type)
       ->condition('settings.target_type', $target_type)
       ->execute();
@@ -586,8 +583,7 @@ class IslandoraUtils {
    *   The file URL.
    */
   public function getDownloadUrl(FileInterface $file) {
-    $undefined = $this->languageManager->getLanguage('und');
-    return $file->url('canonical', ['absolute' => TRUE, 'language' => $undefined]);
+    return $file->createFileUrl(FALSE);
   }
 
   /**

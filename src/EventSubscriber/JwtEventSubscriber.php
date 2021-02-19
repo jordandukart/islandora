@@ -13,7 +13,7 @@ use Drupal\Core\Session\AccountInterface;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 
 /**
- * Class JwtEventSubscriber.
+ * Subscribes to Jwt Events.
  *
  * @package Drupal\islandora\EventSubscriber
  */

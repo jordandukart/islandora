@@ -44,7 +44,7 @@ class EntityBundle extends ConditionPluginBase {
       '#default_value' => $this->configuration['bundles'],
     ];
 
-    return parent::buildConfigurationForm($form, $form_state);;
+    return parent::buildConfigurationForm($form, $form_state);
   }
 
   /**

@@ -5,6 +5,7 @@ namespace Drupal\Tests\islandora\Functional;
 use Drupal\Core\Config\FileStorage;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Session\AccountInterface;
+use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Drupal\link\LinkItemInterface;
 use Drupal\Tests\BrowserTestBase;
 use Drupal\Tests\field\Traits\EntityReferenceTestTrait;
@@ -19,11 +20,22 @@ class IslandoraFunctionalTestBase extends BrowserTestBase {
   use EntityReferenceTestTrait;
   use TestFileCreationTrait;
   use MediaTypeCreationTrait;
+  use StringTranslationTrait;
 
   /**
    * {@inheritdoc}
    */
-  protected static $modules = ['context_ui', 'field_ui', 'islandora'];
+  protected static $modules = [
+    'context_ui',
+    'field_ui',
+    'islandora',
+    'menu_link_content',
+  ];
+
+  /**
+   * {@inheritdoc}
+   */
+  protected $defaultTheme = 'stark';
 
   /**
    * {@inheritdoc}
@@ -80,7 +92,10 @@ class IslandoraFunctionalTestBase extends BrowserTestBase {
     parent::setUp();
 
     // Delete the node rest config that's bootstrapped with Drupal.
-    $this->container->get('entity_type.manager')->getStorage('rest_resource_config')->load('entity.node')->delete();
+    $this->container->get('entity_type.manager')
+      ->getStorage('rest_resource_config')
+      ->load('entity.node')
+      ->delete();
 
     // Set up JWT stuff.
     $key_value = <<<EOD
@@ -113,67 +128,80 @@ EOLIc/4JOdONrJKWYpWIjDhHLL8BacjLoh2bDY0KdYa69AfYvW4=
 -----END RSA PRIVATE KEY-----
 EOD;
 
-    $key = $this->container->get('entity_type.manager')->getStorage('key')->create([
-      'id' => 'test',
-      'label' => 'Test',
-      'key_type' => 'jwt_rs',
-      'key_type_settings' => [
-        'algorithm' => 'RS256',
-      ],
-      'key_provider' => 'config',
-      'key_provider_settings' => [
-        'key_value' => $key_value,
-      ],
-    ]);
+    $key = $this->container->get('entity_type.manager')
+      ->getStorage('key')
+      ->create([
+        'id' => 'test',
+        'label' => 'Test',
+        'key_type' => 'jwt_rs',
+        'key_type_settings' => [
+          'algorithm' => 'RS256',
+        ],
+        'key_provider' => 'config',
+        'key_provider_settings' => [
+          'key_value' => $key_value,
+        ],
+      ]);
     $key->save();
 
-    $jwt_config = $this->container->get('config.factory')->getEditable('jwt.config');
+    $jwt_config = $this->container->get('config.factory')
+      ->getEditable('jwt.config');
     $jwt_config->set('algorithm', 'RS256');
     $jwt_config->set('key_id', 'test');
     $jwt_config->save(TRUE);
 
     // Make some bundles and field by hand so hooks fire.
     // Create an action that dsm's "Hello World!".
-    $hello_world = $this->container->get('entity_type.manager')->getStorage('action')->create([
-      'id' => 'hello_world',
-      'label' => 'Hello World',
-      'type' => 'system',
-      'plugin' => 'action_message_action',
-      'configuration' => [
-        'message' => 'Hello World!',
-      ],
-    ]);
+    $hello_world = $this->container->get('entity_type.manager')
+      ->getStorage('action')
+      ->create([
+        'id' => 'hello_world',
+        'label' => 'Hello World',
+        'type' => 'system',
+        'plugin' => 'action_message_action',
+        'configuration' => [
+          'message' => 'Hello World!',
+        ],
+      ]);
     $hello_world->save();
 
     // Create a vocabulary.
-    $this->testVocabulary = $this->container->get('entity_type.manager')->getStorage('taxonomy_vocabulary')->create([
-      'name' => 'Test Vocabulary',
-      'vid' => 'test_vocabulary',
-    ]);
+    $this->testVocabulary = $this->container->get('entity_type.manager')
+      ->getStorage('taxonomy_vocabulary')
+      ->create([
+        'name' => 'Test Vocabulary',
+        'vid' => 'test_vocabulary',
+      ]);
     $this->testVocabulary->save();
 
     // Create an external_uri field for taxonomy terms.
-    $fieldStorage = $this->container->get('entity_type.manager')->getStorage('field_storage_config')->create([
-      'field_name' => 'field_external_uri',
-      'entity_type' => 'taxonomy_term',
-      'type' => 'link',
-    ]);
+    $fieldStorage = $this->container->get('entity_type.manager')
+      ->getStorage('field_storage_config')
+      ->create([
+        'field_name' => 'field_external_uri',
+        'entity_type' => 'taxonomy_term',
+        'type' => 'link',
+      ]);
     $fieldStorage->save();
-    $field = $this->container->get('entity_type.manager')->getStorage('field_config')->create([
-      'field_storage' => $fieldStorage,
-      'bundle' => $this->testVocabulary->id(),
-      'settings' => [
-        'title' => 'External URI',
-        'link_type' => LinkItemInterface::LINK_EXTERNAL,
-      ],
-    ]);
+    $field = $this->container->get('entity_type.manager')
+      ->getStorage('field_config')
+      ->create([
+        'field_storage' => $fieldStorage,
+        'bundle' => $this->testVocabulary->id(),
+        'settings' => [
+          'title' => 'External URI',
+          'link_type' => LinkItemInterface::LINK_EXTERNAL,
+        ],
+      ]);
     $field->save();
 
     // Create a test content type.
-    $this->testType = $this->container->get('entity_type.manager')->getStorage('node_type')->create([
-      'type' => 'test_type',
-      'name' => 'Test Type',
-    ]);
+    $this->testType = $this->container->get('entity_type.manager')
+      ->getStorage('node_type')
+      ->create([
+        'type' => 'test_type',
+        'name' => 'Test Type',
+      ]);
     $this->testType->save();
     $this->createEntityReferenceField('node', 'test_type', 'field_member_of', 'Member Of', 'node', 'default', [], 2);
     $this->createEntityReferenceField('node', 'test_type', 'field_tags', 'Tags', 'taxonomy_term', 'default', [], 2);
@@ -192,7 +220,8 @@ EOD;
       $destination->write($name, $source->read($name));
     }
 
-    $media_settings = $this->container->get('config.factory')->getEditable('media.settings');
+    $media_settings = $this->container->get('config.factory')
+      ->getEditable('media.settings');
     $media_settings->set('standalone_url', TRUE);
     $media_settings->save(TRUE);
 
@@ -218,11 +247,13 @@ EOD;
    */
   protected function createImageTag() {
     // 'Image' tag.
-    $this->imageTerm = $this->container->get('entity_type.manager')->getStorage('taxonomy_term')->create([
-      'name' => 'Image',
-      'vid' => $this->testVocabulary->id(),
-      'field_external_uri' => [['uri' => "http://purl.org/coar/resource_type/c_c513"]],
-    ]);
+    $this->imageTerm = $this->container->get('entity_type.manager')
+      ->getStorage('taxonomy_term')
+      ->create([
+        'name' => 'Image',
+        'vid' => $this->testVocabulary->id(),
+        'field_external_uri' => [['uri' => "http://purl.org/coar/resource_type/c_c513"]],
+      ]);
     $this->imageTerm->save();
   }
 
@@ -233,11 +264,13 @@ EOD;
    */
   protected function createPreservationMasterTag() {
     // 'Preservation Master' tag.
-    $this->preservationMasterTerm = $this->container->get('entity_type.manager')->getStorage('taxonomy_term')->create([
-      'name' => 'Preservation Master',
-      'vid' => $this->testVocabulary->id(),
-      'field_external_uri' => [['uri' => "http://pcdm.org/use#PreservationMasterFile"]],
-    ]);
+    $this->preservationMasterTerm = $this->container->get('entity_type.manager')
+      ->getStorage('taxonomy_term')
+      ->create([
+        'name' => 'Preservation Master',
+        'vid' => $this->testVocabulary->id(),
+        'field_external_uri' => [['uri' => "http://pcdm.org/use#PreservationMasterFile"]],
+      ]);
     $this->preservationMasterTerm->save();
   }
 
@@ -245,7 +278,11 @@ EOD;
    * Creates a test context.
    */
   protected function createContext($label, $name) {
-    $this->drupalPostForm('admin/structure/context/add', ['label' => $label, 'name' => $name], t('Save'));
+    $this->drupalPostForm('admin/structure/context/add', [
+      'label' => $label,
+      'name' => $name,
+    ],
+      $this->t('Save'));
     $this->assertSession()->statusCodeEquals(200);
   }
 
@@ -263,8 +300,11 @@ EOD;
    */
   protected function addPresetReaction($context_id, $reaction_type, $action_id) {
     $this->drupalGet("admin/structure/context/$context_id/reaction/add/$reaction_type");
-    $this->getSession()->getPage()->findById("edit-reactions-$reaction_type-actions")->selectOption($action_id);
-    $this->getSession()->getPage()->pressButton(t('Save and continue'));
+    $this->getSession()
+      ->getPage()
+      ->findById("edit-reactions-$reaction_type-actions")
+      ->selectOption($action_id);
+    $this->getSession()->getPage()->pressButton($this->t('Save and continue'));
     $this->assertSession()->statusCodeEquals(200);
   }
 
@@ -272,7 +312,7 @@ EOD;
    * Create a new node by posting its add form.
    */
   protected function postNodeAddForm($bundle_id, $values, $button_text) {
-    $this->drupalPostForm("node/add/$bundle_id", $values, t('@text', ['@text' => $button_text]));
+    $this->drupalPostForm("node/add/$bundle_id", $values, $this->t('@text', ['@text' => $button_text]));
     $this->assertSession()->statusCodeEquals(200);
   }
 
@@ -280,7 +320,7 @@ EOD;
    * Create a new node by posting its add form.
    */
   protected function postTermAddForm($taxomony_id, $values, $button_text) {
-    $this->drupalPostForm("admin/structure/taxonomy/manage/$taxomony_id/add", $values, t('@text', ['@text' => $button_text]));
+    $this->drupalPostForm("admin/structure/taxonomy/manage/$taxomony_id/add", $values, $this->t('@text', ['@text' => $button_text]));
     $this->assertSession()->statusCodeEquals(200);
   }
 
@@ -288,7 +328,7 @@ EOD;
    * Edits a node by posting its edit form.
    */
   protected function postEntityEditForm($entity_url, $values, $button_text) {
-    $this->drupalPostForm("$entity_url/edit", $values, t('@text', ['@text' => $button_text]));
+    $this->drupalPostForm("$entity_url/edit", $values, $this->t('@text', ['@text' => $button_text]));
     $this->assertSession()->statusCodeEquals(200);
   }
 
@@ -386,13 +426,15 @@ EOD;
    */
   protected function makeMediaAndFile(AccountInterface $account) {
     // Make a file for the Media.
-    $file = $this->container->get('entity_type.manager')->getStorage('file')->create([
-      'uid' => $account->id(),
-      'uri' => "public://test_file.txt",
-      'filename' => "test_file.txt",
-      'filemime' => "text/plain",
-      'status' => FILE_STATUS_PERMANENT,
-    ]);
+    $file = $this->container->get('entity_type.manager')
+      ->getStorage('file')
+      ->create([
+        'uid' => $account->id(),
+        'uri' => "public://test_file.txt",
+        'filename' => "test_file.txt",
+        'filemime' => "text/plain",
+        'status' => FILE_STATUS_PERMANENT,
+      ]);
     $file->save();
 
     // Get the source field for the media.
@@ -400,11 +442,13 @@ EOD;
     $source_field = $type_configuration['source_field'];
 
     // Make the media for the referencer.
-    $media = $this->container->get('entity_type.manager')->getStorage('media')->create([
-      'bundle' => $this->testMediaType->id(),
-      'name' => 'Media',
-      "$source_field" => [$file->id()],
-    ]);
+    $media = $this->container->get('entity_type.manager')
+      ->getStorage('media')
+      ->create([
+        'bundle' => $this->testMediaType->id(),
+        'name' => 'Media',
+        "$source_field" => [$file->id()],
+      ]);
     $media->save();
 
     return [$file, $media];

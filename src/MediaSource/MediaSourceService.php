@@ -3,7 +3,6 @@
 namespace Drupal\islandora\MediaSource;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
-use Drupal\Core\Entity\Query\QueryFactory;
 use Drupal\Core\File\FileSystemInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\Session\AccountInterface;
@@ -44,13 +43,6 @@ class MediaSourceService {
   protected $languageManager;
 
   /**
-   * Entity query.
-   *
-   * @var \Drupal\Core\Entity\Query\QueryFactory
-   */
-  protected $entityQuery;
-
-  /**
    * File system service.
    *
    * @var \Drupal\Core\File\FileSystemInterface
@@ -73,8 +65,6 @@ class MediaSourceService {
    *   The current user.
    * @param \Drupal\Core\Language\LanguageManagerInterface $language_manager
    *   Language manager.
-   * @param \Drupal\Core\Entity\Query\QueryFactory $entity_query
-   *   Entity query.
    * @param \Drupal\Core\File\FileSystemInterface $file_system
    *   File system service.
    * @param \Drupal\islandora\IslandoraUtils $islandora_utils
@@ -84,14 +74,12 @@ class MediaSourceService {
     EntityTypeManagerInterface $entity_type_manager,
     AccountInterface $account,
     LanguageManagerInterface $language_manager,
-    QueryFactory $entity_query,
     FileSystemInterface $file_system,
     IslandoraUtils $islandora_utils
   ) {
     $this->entityTypeManager = $entity_type_manager;
     $this->account = $account;
     $this->languageManager = $language_manager;
-    $this->entityQuery = $entity_query;
     $this->fileSystem = $file_system;
     $this->islandoraUtils = $islandora_utils;
   }
@@ -293,7 +281,7 @@ class MediaSourceService {
       }
 
       $directory = $this->fileSystem->dirname($content_location);
-      if (!file_prepare_directory($directory, FILE_CREATE_DIRECTORY | FILE_MODIFY_PERMISSIONS)) {
+      if (!$this->fileSystem->prepareDirectory($directory, FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS)) {
         throw new HttpException(500, "The destination directory does not exist, could not be created, or is not writable");
       }
 
@@ -320,7 +308,7 @@ class MediaSourceService {
 
       // Set alt text.
       if ($source_field_config->getSetting('alt_field') && $source_field_config->getSetting('alt_field_required')) {
-        $media_struct[$source_field]['alt'] = $file->getFilename;
+        $media_struct[$source_field]['alt'] = $file->getFilename();
       }
 
       $media = $this->entityTypeManager->getStorage('media')->create($media_struct);
@@ -328,6 +316,70 @@ class MediaSourceService {
       return $media;
     }
 
+  }
+
+  /**
+   * Creates a new File using the provided resource, adding it to a Media.
+   *
+   * @param \Drupal\media\MediaInterface $media
+   *   The Media that will receive the new file.
+   * @param string $destination_field
+   *   The field on the media where the file will go.
+   * @param resource $resource
+   *   New file contents as a resource.
+   * @param string $mimetype
+   *   New mimetype of contents.
+   * @param string $content_location
+   *   Drupal/PHP stream wrapper for where to upload the binary.
+   *
+   * @throws \Symfony\Component\HttpKernel\Exception\BadRequestHttpException
+   * @throws \Symfony\Component\HttpKernel\Exception\HttpException
+   */
+  public function putToMedia(
+    MediaInterface $media,
+    $destination_field,
+    $resource,
+    $mimetype,
+    $content_location
+  ) {
+    if ($media->hasField($destination_field)) {
+      // Construct the File.
+      $file = $this->entityTypeManager->getStorage('file')->create([
+        'uid' => $this->account->id(),
+        'uri' => $content_location,
+        'filename' => $this->fileSystem->basename($content_location),
+        'filemime' => $mimetype,
+        'status' => FILE_STATUS_PERMANENT,
+      ]);
+
+      // Validate file extension.
+      $bundle = $media->bundle();
+      $destination_field_config = $this->entityTypeManager->getStorage('field_config')->load("media.$bundle.$destination_field");
+      $valid_extensions = $destination_field_config->getSetting('file_extensions');
+      $errors = file_validate_extensions($file, $valid_extensions);
+
+      if (!empty($errors)) {
+        throw new BadRequestHttpException("Invalid file extension.  Valid types are $valid_extensions");
+      }
+
+      $directory = $this->fileSystem->dirname($content_location);
+      if (!$this->fileSystem->prepareDirectory($directory, FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS)) {
+        throw new HttpException(500, "The destination directory does not exist, could not be created, or is not writable");
+      }
+
+      // Copy over the file content.
+      $this->updateFile($file, $resource, $mimetype);
+      $file->save();
+
+      // Update the media.
+      $media->{$destination_field}->setValue([
+        'target_id' => $file->id(),
+      ]);
+      $media->save();
+    }
+    else {
+      throw new BadRequestHttpException("Media does not have destination field $destination_field");
+    }
   }
 
 }

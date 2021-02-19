@@ -8,7 +8,7 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
 
 /**
- * Class MediaLinkHeaderSubscriber.
+ * Subscribes to MediaLinkHeader Event.
  *
  * @package Drupal\islandora\EventSubscriber
  */

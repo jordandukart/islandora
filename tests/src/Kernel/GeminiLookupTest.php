@@ -4,10 +4,10 @@ namespace Drupal\Tests\islandora\Kernel;
 
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\file\FileInterface;
-use Drupal\media\MediaInterface;
 use Drupal\islandora\GeminiLookup;
 use Drupal\islandora\MediaSource\MediaSourceService;
 use Drupal\jwt\Authentication\Provider\JwtAuth;
+use Drupal\media\MediaInterface;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Response;
 use Islandora\Crayfish\Commons\Client\GeminiClient;
@@ -16,7 +16,7 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * Class GeminiLookupTest.
+ * Tests Gemini Lookup.
  *
  * @group islandora
  * @coversDefaultClass \Drupal\islandora\GeminiLookup
@@ -125,7 +125,10 @@ class GeminiLookupTest extends IslandoraKernelTestBase {
   private function mockGeminiClientForSuccess() {
     $prophecy = $this->prophesize(GeminiClient::class);
     $prophecy->getUrls(Argument::any(), Argument::any())
-      ->willReturn(['drupal' => '', 'fedora' => 'http://localhost:8080/fcrepo/rest/abc123']);
+      ->willReturn([
+        'drupal' => '',
+        'fedora' => 'http://localhost:8080/fcrepo/rest/abc123',
+      ]);
     $this->geminiClient = $prophecy->reveal();
   }
 
